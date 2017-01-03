@@ -7,10 +7,10 @@ ESP8266 controls OLED, BMP095 for temp and pressure, displays data and exports a
 SCL on D1, SDA on D2 of nodemcu board.
 Oled is the cheapest one from aliexpress, one with four pins (i2c, no reset).
 
-TODO: add MH-Z19 
-TODO: add ambient light sensor
-TODO: add particles detector (Sharp).
-TODO: use WIFI  AP mode to configure MQTT
+* TODO: add MH-Z19 
+* TODO: add ambient light sensor
+* TODO: add particles detector (Sharp).
+* TODO: use WIFI  AP mode to configure MQTT
 
 
 Thanks to the authors of esp8266 core and Adafruit for their great libraries!
