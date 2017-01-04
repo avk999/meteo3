@@ -4,8 +4,10 @@ Simple environment sensor.
 
 ESP8266 controls OLED, BMP095 for temp and pressure, displays data and exports as mqtt.
 
-SCL on D1, SDA on D2 of nodemcu board.
+SCL on D1 (D5) , SDA on D2 (D4) of nodemcu board.
 Oled is the cheapest one from aliexpress, one with four pins (i2c, no reset).
+
+DHT11 on D14 (probably D5 on your board)
 
 * TODO: add MH-Z19 
 * TODO: add ambient light sensor
