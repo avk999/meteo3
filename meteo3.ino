@@ -5,52 +5,48 @@
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
 #include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager
-
-// Oled library
-#include <U8g2lib.h>
+#define APNAME "Meteo"
 
 //I2C
 #include <Wire.h>
+#define SDA 4
+#define SCL 5
+
+
+// Oled library
+#include <U8g2lib.h>
+#define MYFONT u8g2_font_cu12_t_cyrillic
+U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ SCL, /* data=*/ SDA, /* reset=*/ U8X8_PIN_NONE);   // All Boards without Reset of the Display
 
 
 // BMP085
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BMP085_U.h>
+Adafruit_BMP085_Unified bmp = Adafruit_BMP085_Unified(10085);
+
 
 // DHT11
 #include <DHT.h>
 // #include <DHT_U.h>
 #define DHTPIN 14 
 #define DHTTYPE DHT11
-DHT dht(DHTPIN, DHTTYPE, 15); //11 is some magic value for ESP8266
+DHT dht(DHTPIN, DHTTYPE, 15); //third arg is clock cycles - need to increase  for ESP8266
+
+
+// MH-Z19
+#define MHRX 13
+#define MHTX 15
+#define MHTIMEOUT 3000
+#include <SoftwareSerial.h>
+SoftwareSerial MySerial(MHRX,MHTX);
 
 
 
 // MQTT
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
-
-#define MYFONT u8g2_font_cu12_t_cyrillic
-#define APNAME "Meteo"
-
-
-#define SDA 4
-#define SCL 5
-U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ SCL, /* data=*/ SDA, /* reset=*/ U8X8_PIN_NONE);   // All Boards without Reset of the Display
-Adafruit_BMP085_Unified bmp = Adafruit_BMP085_Unified(10085);
-
-
-// MQTT setup
-/* #define MQTT_HOST "broker.hivemq.com" */
-
 #include "mqttconfig.h" 
 /* should define MQTT_HOST,MQTT_LOGIN,MQTT_PASS,TOPIC_PREFIX */
-
-/* 
-#define DEBUG_ESP_WIFI
-#define DEBUG_ESP_PORT Serial
-#define MQTT_DEBUG 
-*/
 #define MQTT_PORT 1883
 WiFiClient wifi;
 // 
@@ -59,19 +55,14 @@ Adafruit_MQTT_Publish bmptemp = Adafruit_MQTT_Publish(&mqtt, TOPIC_PREFIX "tempe
 Adafruit_MQTT_Publish bmppressure = Adafruit_MQTT_Publish(&mqtt, TOPIC_PREFIX "pressure/bmp");
 Adafruit_MQTT_Publish dhttemp = Adafruit_MQTT_Publish(&mqtt, TOPIC_PREFIX "temperature/dht");
 Adafruit_MQTT_Publish dhthum = Adafruit_MQTT_Publish(&mqtt, TOPIC_PREFIX "humidity/dht");
-
+Adafruit_MQTT_Publish ppmco2 = Adafruit_MQTT_Publish(&mqtt, TOPIC_PREFIX "co2/mhz19");
 
 
 void MQTT_connect() {
   int8_t ret;
-
-  // Stop if already connected.
   if (mqtt.connected()) {
     return;
   }
-
-  Serial.print("Connecting to MQTT... ");
-
   uint8_t retries = 3;
   while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
        Serial.println(mqtt.connectErrorString(ret));
@@ -82,11 +73,11 @@ void MQTT_connect() {
        u8g2.sendBuffer();
        Serial.println("Retrying MQTT connection in 10 seconds...");
        mqtt.disconnect();
-       delay(5000);  // wait 5 seconds
+       delay(5000); 
        retries--;
        if (retries == 0) {
        
-         // basically die and wait for WDT to reset me
+         //  die and wait for WDT to reset me
          while (1);
        }
   }
@@ -107,20 +98,47 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 }
 
 
+int readCO2(){
+  byte cmd[9] = {0xFF,0x01,0x86,0x00,0x00,0x00,0x00,0x00,0x79}; 
+  unsigned char response[9];
+  int ppm;
+  MySerial.write(cmd, 9);
+  memset(response, 0, 9);
+  int r=MySerial.readBytes(response, 9);
+  int i;
+  byte crc = 0;
+  for (i = 1; i < 8; i++) crc+=response[i];
+  crc = 255 - crc;
+  crc++;
+  if ( !(response[0] == 0xFF && response[1] == 0x86 && response[8] == crc) ) {
+   
+    Serial.println("CRC error: " + String(crc) + " / "+ String(response[8]));
+    ppm=-1;
+    } 
+  else {
+    unsigned int responseHigh = (unsigned int) response[2];
+    unsigned int responseLow = (unsigned int) response[3];
+    ppm = (256*responseHigh) + responseLow;
+ //   Serial.print("ppm="); Serial.println(ppm);
+}
+return(ppm);
+}
 
 
  
 void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
-
+  MySerial.begin(9600);
+  MySerial.setTimeout(MHTIMEOUT);
+  
   u8g2.begin();
   u8g2.enableUTF8Print();
   u8g2.clear();
-  u8g2.setFont(MYFONT);  // choose a suitable font
+  u8g2.setFont(MYFONT);  
   u8g2.setCursor(0,15);
-  u8g2.print("Стартуем/start");  // write something to the internal memory
-  u8g2.sendBuffer();          // transfer internal memory to the display
+  u8g2.print("Init WIFI");  
+  u8g2.sendBuffer();          
    WiFiManager wifiManager;
    wifiManager.setAPCallback(configModeCallback);
    if (!wifiManager.autoConnect(APNAME)) {
@@ -128,7 +146,6 @@ void setup() {
       u8g2.drawStr(0,20,"Config failed");
       u8g2.sendBuffer();
       delay(3000);
-      //reset and try again, or maybe put it to deep sleep
       ESP.reset();
       delay(5000);
     }
@@ -136,12 +153,15 @@ void setup() {
       // say "Connected" to OLED!
       u8g2.clear();
       u8g2.setCursor(0,15);
-      u8g2.print( "Соединились!");
+      u8g2.print( "Connected!");
       u8g2.setCursor(0,32);
       u8g2.print("IP=");
       u8g2.print(WiFi.localIP());
-      u8g2.sendBuffer();
       u8g2.setCursor(0,46);
+      u8g2.print(WiFi.SSID());
+      u8g2.sendBuffer();
+      u8g2.setCursor(0,61);
+    
 //      delay(1000);
     }
 
@@ -154,13 +174,10 @@ void setup() {
     u8g2.setCursor(0,61);
 
     dht.begin();
-    u8g2.print("DHT11 init done");
+  //  u8g2.print("DHT11 init done");
+    
     u8g2.sendBuffer();
-   // u8g2.setCursor(0,76);
-   // u8g2.print("setup() done");
-   // u8g2.sendBuffer();
- 
-    delay(1000);
+     delay(1000);
 
    
 
@@ -199,21 +216,10 @@ void loop() {
  float(mmhg);
  mmhg=event.pressure/1.3332239;
  u8g2.setCursor(0,35);
- //u8g2.print("p=");
- u8g2.print(mmhg);
- u8g2.print(" mmHg");
- u8g2.setCursor(0,46);
- //u8g2.print("p=");
- //u8g2.print(event.pressure);
- //u8g2.print(" hPa");
- //u8g2.setCursor(0,61);
- //u8g2.print("MQTT ");
- //if (bmptemp.publish(temperature)){
- // u8g2.print("temp OK ");
- //} else {
-//  u8g2.print("temp fail");
-// }
+// u8g2.print(mmhg);  Pressure not that interesting and OLED is small
+// u8g2.print(" mmHg");
 
+ 
  bmptemp.publish(temperature);
  bmppressure.publish(event.pressure);
  
@@ -221,19 +227,47 @@ void loop() {
 
  u8g2.sendBuffer();
 
+// DHT
+  u8g2.setCursor(0,35);
   // Read temperature as Celsius (the default)
   float t = dht.readTemperature();
   float h = dht.readHumidity();
-  u8g2.setCursor(0,61);
   if  (isnan(h) || isnan(t)){
     u8g2.print("DHT error, reboot");
+    u8g2.sendBuffer();
     delay(2000);
     ESP.restart();
   }
+  u8g2.print(h,0);
+  u8g2.print(" %");
   dhttemp.publish(t);
   dhthum.publish(h);
-  u8g2.print(h,1);
-  u8g2.print(" %");
+  u8g2.sendBuffer();
+  u8g2.setCursor(0,55);
+// MH-Z19
+  
+  if (millis() < 180000){
+    Serial.print("Still heating - ");
+    Serial.println(millis());
+    u8g2.print("CO2 heat ");
+    u8g2.print( (180000 - millis())/1000 );
+  } else { 
+    int ppm=readCO2();
+    if (ppm < 0){
+      u8g2.print("CO2 err! reboot.");
+      u8g2.sendBuffer();
+      delay(2000);
+      ESP.restart();
+       }
+     u8g2.print(ppm);
+     u8g2.print(" ppm CO2");
+     ppmco2.publish(ppm);
+    } 
+  
+
+  
+  //u8g2.print(h);
+  //u8g2.print(" %");
   u8g2.sendBuffer();
  
  delay(30000);
