@@ -2,7 +2,7 @@
 
 Simple environment sensor.
 
-ESP8266 controls OLED, BMP095 for temp and pressure, displays data and exports as mqtt.
+ESP8266 controls OLED, BMP095 for temp and pressure, dht-11 for humidity, displays data and exports as mqtt.
 
 SCL on D1 (D5) , SDA on D2 (D4) of nodemcu board.
 Oled is the cheapest one from aliexpress, one with four pins (i2c, no reset).
@@ -13,6 +13,7 @@ MH-Z19 on GPIO 13, 15
 * TODO: add ambient light sensor
 * TODO: add particles detector (Sharp).
 * TODO: use WIFI  AP mode to configure MQTT
+* TODO: get hands on BM280 and replace DHT-11 with it
 
 
 Thanks to the authors of esp8266 core and Adafruit for their great libraries!
