@@ -98,8 +98,23 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 }
 
 
+void mhrange(){
+    byte setrange[9]={0xFF, 0x01, 0x99, 0x00, 0x00, 0x00, 0x07, 0xD0, 0x8F};
+    unsigned char response[9];
+  MySerial.write(setrange, 9);
+  memset(response, 0, 9);
+  int r=MySerial.readBytes(response, 9);
+  Serial.print("sent rangeset, response:");
+  for (int i=0;i<8;i++){
+    Serial.print(response[i],HEX); Serial.print(" ");
+  }
+  Serial.println("done");
+
+}
+
 int readCO2(){
   byte cmd[9] = {0xFF,0x01,0x86,0x00,0x00,0x00,0x00,0x00,0x79}; 
+  byte setrange[9]={0xFF, 0x01, 0x99, 0x00, 0x00, 0x00, 0x07, 0xD0, 0x8F};
   unsigned char response[9];
   int ppm;
   MySerial.write(cmd, 9);
@@ -120,6 +135,9 @@ int readCO2(){
     unsigned int responseLow = (unsigned int) response[3];
     ppm = (256*responseHigh) + responseLow;
  //   Serial.print("ppm="); Serial.println(ppm);
+
+ unsigned int t=response[4]-40;
+ Serial.print("mh-z19 temp="); Serial.println(t,DEC);
 }
 return(ppm);
 }
@@ -178,6 +196,7 @@ void setup() {
     
     u8g2.sendBuffer();
      delay(1000);
+   //  mhrange();
 
    
 
@@ -238,6 +257,7 @@ void loop() {
     delay(2000);
     ESP.restart();
   }
+  Serial.print("dht temp=");Serial.println(t, 2);
   u8g2.print(h,0);
   u8g2.print(" %");
   dhttemp.publish(t);
